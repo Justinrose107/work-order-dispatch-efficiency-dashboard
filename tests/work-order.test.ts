@@ -1,0 +1,169 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import * as XLSX from 'xlsx';
+import { parseWorkbookData } from '../lib/import-data.ts';
+import {
+  average,
+  buildWorkOrderRecords,
+  defaultWorkOrderTypeSelection,
+  distinctCount,
+  filterWorkOrderRecords,
+  formatDuration,
+  median,
+  parseDateTime,
+  recognizeHeaders,
+  workOrderMetricEntries,
+} from '../lib/work-order.ts';
+
+const rows = [
+  {
+    'Case Number': 'C-1',
+    'Work Order Number': 'WO-1',
+    'Created On': '2026-08-01 08:00',
+    'Dispatch Time': '2026-08-01 08:10',
+    'Departure Time': '2026-08-01 08:30',
+    'Arrival Time': '2026-08-01 09:00',
+    'Work Order Closed Time': '2026-08-01 11:00',
+    'Service Region': 'East',
+    Country: 'China',
+    'Work Order Type': 'Repair',
+  },
+  {
+    'Case Number': 'C-1',
+    'Work Order Number': 'WO-2',
+    'Created On': '2026-08-02 08:00',
+    'Dispatch Time': '2026-08-02 10:05',
+    'Departure Time': '2026-08-02 10:30',
+    'Arrival Time': '2026-08-02 11:30',
+    'Work Order Closed Time': '2026-08-02 13:00',
+    'Service Region': 'West',
+    Country: 'China',
+    'Work Order Type': 'Installation',
+  },
+  {
+    'Case Number': 'C-2',
+    'Work Order Number': 'WO-3',
+    'Created On': '2026-08-03 09:00',
+    'Dispatch Time': '2026-08-03 08:00',
+    'Departure Time': '',
+    'Arrival Time': '',
+    'Service Region': 'East',
+    Country: 'Japan',
+    'Work Order Type': 'repair',
+  },
+  {
+    'Case Number': 'C-1',
+    'Work Order Number': 'WO-1',
+    'Created On': '2026-08-01 08:00',
+    'Dispatch Time': '2026-08-01 08:10',
+    'Service Region': 'East',
+    Country: 'China',
+    'Work Order Type': 'Repair',
+  },
+];
+
+test('recognizes supported headers without manual mapping', () => {
+  const result = recognizeHeaders([' case-number ', 'WORK ORDER NUMBER', 'Unknown Field']);
+  assert.equal(result.mapping.get('Case Number'), ' case-number ');
+  assert.equal(result.mapping.get('Work Order Number'), 'WORK ORDER NUMBER');
+  assert.deepEqual(result.unrecognizedHeaders, ['Unknown Field']);
+});
+
+test('parses common Excel-style dates and preserves missing values', () => {
+  assert.equal(parseDateTime('2026/08/24 14:30')?.getFullYear(), 2026);
+  assert.equal(parseDateTime('2026年8月24日 14:30')?.getMonth(), 7);
+  const serialDate = parseDateTime(45_000);
+  assert.equal(serialDate?.getFullYear(), 2023);
+  assert.equal(serialDate?.getHours(), 0);
+  assert.equal(parseDateTime(''), null);
+  assert.equal(parseDateTime('not a date'), null);
+});
+
+test('calculates work-order durations using the required start and end fields', () => {
+  const record = buildWorkOrderRecords(rows.slice(0, 1)).records[0];
+  assert.equal(record.durations.woToDispatch, 10);
+  assert.equal(record.durations.dispatchToDeparture, 20);
+  assert.equal(record.durations.travelTime, 30);
+  assert.equal(record.durations.dispatchToArrival, 50);
+  assert.equal(record.durations.arrivalToClose, 120);
+});
+
+test('flags negative time sequences and excludes their invalid duration', () => {
+  const record = buildWorkOrderRecords(rows.slice(2, 3)).records[0];
+  assert.equal(record.durations.woToDispatch, null);
+  assert.equal(record.qualityFlag, 'Time Data Error');
+  assert.deepEqual(record.invalidDurationKeys, ['woToDispatch']);
+});
+
+test('counts distinct Case Number and Work Order Number independently', () => {
+  const records = buildWorkOrderRecords(rows).records;
+  assert.equal(distinctCount(records, 'Case Number'), 2);
+  assert.equal(distinctCount(records, 'Work Order Number'), 3);
+});
+
+test('calculates median correctly without null values or outlier distortion', () => {
+  assert.equal(median([10, 12, 15, 18, 540, null]), 15);
+  assert.equal(median([10, 20]), 15);
+  assert.equal(median([null]), null);
+});
+
+test('calculates average correctly while excluding null values', () => {
+  assert.equal(average([10, 20, 30, null]), 20);
+  assert.equal(average([null]), null);
+});
+
+test('uses each Work Order Number once in time metrics while retaining raw rows', () => {
+  const records = buildWorkOrderRecords(rows).records;
+  assert.equal(records.length, 4);
+  const entries = workOrderMetricEntries(records, 'woToDispatch');
+  assert.equal(entries.length, 2);
+  assert.deepEqual(entries.map((entry) => entry.workOrderNumber), ['WO-1', 'WO-2']);
+});
+
+test('formats durations as minutes, hours, or N/A', () => {
+  assert.equal(formatDuration(18), '18 min');
+  assert.equal(formatDuration(125), '2.1 h');
+  assert.equal(formatDuration(null), 'N/A');
+});
+
+test('applies date and multi-select filters together', () => {
+  const records = buildWorkOrderRecords(rows).records;
+  const filtered = filterWorkOrderRecords(records, {
+    dateFrom: '2026-08-01',
+    dateTo: '2026-08-02',
+    selections: { 'Service Region': ['East'], Country: ['China'] },
+  });
+  assert.equal(filtered.length, 2);
+  assert.ok(filtered.every((record) => record.values['Work Order Number'] === 'WO-1'));
+});
+
+test('defaults Work Order Type to Repair when present, without hard-coding the source casing', () => {
+  const records = buildWorkOrderRecords(rows).records;
+  assert.deepEqual(defaultWorkOrderTypeSelection(records), ['Repair']);
+});
+
+test('imports an Excel workbook and auto-recognizes fields', () => {
+  const workbook = XLSX.utils.book_new();
+  const excelRows = rows.slice(0, 2).map((row, index) => ({
+    ...row,
+    'Created On': new Date(2026, 7, index + 1, 8, 0),
+    'Dispatch Time': new Date(2026, 7, index + 1, index ? 10 : 8, index ? 5 : 10),
+  }));
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(excelRows), 'Orders');
+  const data = XLSX.write(workbook, { type: 'array', bookType: 'xlsx' }) as ArrayBuffer;
+  const result = parseWorkbookData(data, 'orders.xlsx');
+  assert.equal(result.rawRowCount, 2);
+  assert.equal(result.sheetName, 'Orders');
+  assert.ok(result.recognizedFields.includes('Work Order Number'));
+  assert.equal(result.records[0].durations.woToDispatch, 10);
+});
+
+test('imports CSV data and leaves absent optional fields harmlessly empty', () => {
+  const csv = 'Case Number,Work Order Number,Created On,Dispatch Time\nC-9,WO-9,2026-08-01 08:00,2026-08-01 08:20';
+  const bytes = new TextEncoder().encode(csv);
+  const data = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+  const result = parseWorkbookData(data, 'orders.csv');
+  assert.equal(result.rawRowCount, 1);
+  assert.equal(result.records[0].values.Modality, '');
+  assert.equal(result.records[0].durations.woToDispatch, 20);
+});
