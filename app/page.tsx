@@ -371,7 +371,7 @@ export default function Home() {
             <span className="h-3 w-px bg-slate-200" />
             {dashboardView === 'backfill' ? (
               <>
-                <span className="font-medium text-amber-700">Departure is earlier than Dispatch</span>
+                <span className="font-medium text-amber-700">Departure is earlier than Dispatch, or missing Departure with Arrival earlier than Dispatch</span>
                 <span className="text-slate-400">WO-to-Dispatch and valid Travel Time are calculated independently.</span>
               </>
             ) : (

@@ -61,11 +61,10 @@ export interface WorkOrderRecord {
 function datesShowBackfilledDispatch(dates: Record<DateField, Date | null>) {
   const dispatch = dates['Dispatch Time'];
   const departure = dates['Departure Time'];
-  return Boolean(
-    dispatch &&
-    departure &&
-    departure < dispatch
-  );
+  const arrival = dates['Arrival Time'];
+  if (!dispatch) return false;
+  if (departure) return departure < dispatch;
+  return Boolean(arrival && arrival < dispatch);
 }
 
 export function isBackfilledWorkOrder(record: WorkOrderRecord) {
