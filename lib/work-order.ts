@@ -61,13 +61,10 @@ export interface WorkOrderRecord {
 function datesShowBackfilledDispatch(dates: Record<DateField, Date | null>) {
   const dispatch = dates['Dispatch Time'];
   const departure = dates['Departure Time'];
-  const arrival = dates['Arrival Time'];
   return Boolean(
     dispatch &&
     departure &&
-    arrival &&
-    departure < dispatch &&
-    arrival < dispatch
+    departure < dispatch
   );
 }
 
