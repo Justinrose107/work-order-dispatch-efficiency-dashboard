@@ -83,12 +83,15 @@ function TrendCard({ title, trend, color }: { title: string; trend: TrendPoint[]
   );
 }
 
-export function DashboardCharts({ woToDispatchTrend, dispatchToArrivalTrend, distribution }: { woToDispatchTrend: TrendPoint[]; dispatchToArrivalTrend: TrendPoint[]; distribution: DistributionPoint[] }) {
+export function DashboardCharts({ woToDispatchTrend, dispatchToArrivalTrend, distribution }: { woToDispatchTrend: TrendPoint[]; dispatchToArrivalTrend?: TrendPoint[]; distribution: DistributionPoint[] }) {
   const totalValid = distribution.reduce((sum, point) => sum + point.count, 0);
+  const showDispatchToArrival = dispatchToArrivalTrend !== undefined;
   return (
-    <section className="grid gap-5 xl:grid-cols-3">
+    <section className={`grid gap-5 ${showDispatchToArrival ? 'xl:grid-cols-3' : 'lg:grid-cols-2'}`}>
       <TrendCard title="Average WO-to-Dispatch Time Trend" trend={woToDispatchTrend} color="#0891b2" />
-      <TrendCard title="Average Dispatch-to-Arrival Time Trend" trend={dispatchToArrivalTrend} color="#4f46e5" />
+      {showDispatchToArrival && (
+        <TrendCard title="Average Dispatch-to-Arrival Time Trend" trend={dispatchToArrivalTrend} color="#4f46e5" />
+      )}
 
       <article className="min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="flex min-h-[76px] items-start justify-between border-b border-slate-100 px-5 py-4">

@@ -55,7 +55,24 @@ export interface WorkOrderRecord {
   dates: Record<DateField, Date | null>;
   durations: Record<DurationKey, number | null>;
   invalidDurationKeys: DurationKey[];
-  qualityFlag: 'OK' | 'Time Data Error';
+  qualityFlag: 'OK' | 'Backfilled Dispatch' | 'Time Data Error';
+}
+
+function datesShowBackfilledDispatch(dates: Record<DateField, Date | null>) {
+  const dispatch = dates['Dispatch Time'];
+  const departure = dates['Departure Time'];
+  const arrival = dates['Arrival Time'];
+  return Boolean(
+    dispatch &&
+    departure &&
+    arrival &&
+    departure < dispatch &&
+    arrival < dispatch
+  );
+}
+
+export function isBackfilledWorkOrder(record: WorkOrderRecord) {
+  return datesShowBackfilledDispatch(record.dates);
 }
 
 export interface ParsedRows {
@@ -236,6 +253,7 @@ export function buildWorkOrderRecords(rows: Record<string, unknown>[]): ParsedRo
       dispatchToArrival: validDuration(dates['Dispatch Time'], dates['Arrival Time']),
       arrivalToClose: validDuration(dates['Arrival Time'], dates['Work Order Closed Time']),
     };
+    const isBackfilled = datesShowBackfilledDispatch(dates);
 
     return {
       id,
@@ -244,7 +262,11 @@ export function buildWorkOrderRecords(rows: Record<string, unknown>[]): ParsedRo
       dates,
       durations,
       invalidDurationKeys,
-      qualityFlag: invalidDurationKeys.length ? 'Time Data Error' : 'OK',
+      qualityFlag: isBackfilled
+        ? 'Backfilled Dispatch'
+        : invalidDurationKeys.length
+          ? 'Time Data Error'
+          : 'OK',
     } satisfies WorkOrderRecord;
   });
 

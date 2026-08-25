@@ -8,6 +8,8 @@ import {
   CheckCircle2,
   Clock3,
   FileSpreadsheet,
+  History,
+  LayoutDashboard,
   MapPinCheck,
   RotateCcw,
   ShieldCheck,
@@ -25,6 +27,7 @@ import {
   defaultWorkOrderTypeSelection,
   filterWorkOrderRecords,
   formatDuration,
+  isBackfilledWorkOrder,
   localDateKey,
   workOrderMetricEntries,
   type DurationKey,
@@ -52,6 +55,7 @@ const FILTER_FIELDS = [
 
 type FilterField = (typeof FILTER_FIELDS)[number];
 type Filters = Record<FilterField, string[]>;
+type DashboardView = 'standard' | 'backfill';
 
 const FILTER_LABELS: Record<FilterField, string> = {
   'Service Region': 'Service Region',
@@ -117,6 +121,7 @@ export default function Home() {
   const [isDragging, setIsDragging] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [error, setError] = useState('');
+  const [dashboardView, setDashboardView] = useState<DashboardView>('standard');
 
   const records = useMemo(() => imported?.records ?? [], [imported]);
   const dateBounds = useMemo(() => fileDateBounds(records), [records]);
@@ -129,11 +134,21 @@ export default function Home() {
     ]),
   ) as Record<FilterField, string[]>, [records]);
 
-  const filteredRecords = useMemo(() => filterWorkOrderRecords(records, {
+  const filteredByUser = useMemo(() => filterWorkOrderRecords(records, {
     dateFrom,
     dateTo,
     selections: filters,
   }), [dateFrom, dateTo, filters, records]);
+
+  const backfilledRecords = useMemo(
+    () => filteredByUser.filter(isBackfilledWorkOrder),
+    [filteredByUser],
+  );
+  const standardRecords = useMemo(
+    () => filteredByUser.filter((record) => !isBackfilledWorkOrder(record)),
+    [filteredByUser],
+  );
+  const filteredRecords = dashboardView === 'backfill' ? backfilledRecords : standardRecords;
 
   const metrics = useMemo(() => ({
     woToDispatch: metricSummary(filteredRecords, 'woToDispatch'),
@@ -191,6 +206,7 @@ export default function Home() {
       setFilters(defaultFiltersFor(result.records));
       setDateFrom(bounds.min);
       setDateTo(bounds.max);
+      setDashboardView('standard');
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'The file could not be imported.');
     } finally {
@@ -212,10 +228,11 @@ export default function Home() {
     setDateFrom('');
     setDateTo('');
     setError('');
+    setDashboardView('standard');
   };
 
   const subtitle = records.length
-    ? `${dateFrom || 'Earliest'} → ${dateTo || 'Latest'} · ${filteredRecords.length.toLocaleString()} of ${records.length.toLocaleString()} source rows`
+    ? `${dateFrom || 'Earliest'} → ${dateTo || 'Latest'} · ${filteredRecords.length.toLocaleString()} ${dashboardView === 'backfill' ? 'backfilled' : 'standard'} rows`
     : 'Import Excel or CSV data to calculate dispatch efficiency locally';
 
   return (
@@ -285,6 +302,37 @@ export default function Home() {
           </div>
         )}
 
+        <section className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+          <div className="px-1">
+            <h2 className="text-sm font-semibold text-slate-900">Dashboard view</h2>
+            <p className="mt-0.5 text-xs text-slate-500">Separate standard dispatch flow from cases recorded after field activity</p>
+          </div>
+          <div role="tablist" aria-label="Dashboard view" className="grid grid-cols-2 gap-1 rounded-xl bg-slate-100 p-1">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={dashboardView === 'standard'}
+              onClick={() => setDashboardView('standard')}
+              className={`flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold transition ${dashboardView === 'standard' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+            >
+              <LayoutDashboard className="h-4 w-4" />
+              Standard cases
+              <span className="rounded-full bg-slate-200/80 px-2 py-0.5 tabular-nums">{standardRecords.length.toLocaleString()}</span>
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={dashboardView === 'backfill'}
+              onClick={() => setDashboardView('backfill')}
+              className={`flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold transition ${dashboardView === 'backfill' ? 'bg-amber-50 text-amber-800 shadow-sm ring-1 ring-amber-200' : 'text-slate-500 hover:text-slate-800'}`}
+            >
+              <History className="h-4 w-4" />
+              Backfilled cases
+              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-amber-800 tabular-nums">{backfilledRecords.length.toLocaleString()}</span>
+            </button>
+          </div>
+        </section>
+
         <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="mb-3 flex items-center justify-between gap-3">
             <div>
@@ -307,28 +355,37 @@ export default function Home() {
           </div>
         </section>
 
-        <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+        <section className={`grid gap-3 sm:grid-cols-2 ${dashboardView === 'backfill' ? 'xl:grid-cols-4' : 'lg:grid-cols-3 xl:grid-cols-6'}`}>
           <KpiCard label="Total Cases" value={distinctCount(filteredRecords, 'Case Number').toLocaleString()} note="Distinct Case Number" icon={<UsersRound className="h-4 w-4" />} />
           <KpiCard label="Total Work Orders" value={distinctCount(filteredRecords, 'Work Order Number').toLocaleString()} note="Distinct Work Order Number" icon={<BriefcaseBusiness className="h-4 w-4" />} />
           <KpiCard accent label="Average WO → Dispatch" value={formatDuration(metrics.woToDispatch.value)} note={`${metrics.woToDispatch.count} valid work orders`} icon={<Clock3 className="h-4 w-4" />} />
-          <KpiCard label="Average Dispatch → Departure" value={formatDuration(metrics.dispatchToDeparture.value)} note={`${metrics.dispatchToDeparture.count} valid work orders`} icon={<Clock3 className="h-4 w-4" />} />
+          {dashboardView === 'standard' && <KpiCard label="Average Dispatch → Departure" value={formatDuration(metrics.dispatchToDeparture.value)} note={`${metrics.dispatchToDeparture.count} valid work orders`} icon={<Clock3 className="h-4 w-4" />} />}
           <KpiCard label="Average Travel Time" value={formatDuration(metrics.travelTime.value)} note={`${metrics.travelTime.count} valid work orders`} icon={<MapPinCheck className="h-4 w-4" />} />
-          <KpiCard label="Average Dispatch → Arrival" value={formatDuration(metrics.dispatchToArrival.value)} note={`${metrics.dispatchToArrival.count} valid work orders`} icon={<MapPinCheck className="h-4 w-4" />} />
+          {dashboardView === 'standard' && <KpiCard label="Average Dispatch → Arrival" value={formatDuration(metrics.dispatchToArrival.value)} note={`${metrics.dispatchToArrival.count} valid work orders`} icon={<MapPinCheck className="h-4 w-4" />} />}
         </section>
 
         {records.length > 0 && (
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs text-slate-500 shadow-sm">
-            <span className="font-semibold text-slate-700">Data quality</span>
+            <span className="font-semibold text-slate-700">{dashboardView === 'backfill' ? 'Backfill scope' : 'Data quality'}</span>
             <span>{filteredRecords.length.toLocaleString()} visible source rows</span>
             <span className="h-3 w-px bg-slate-200" />
-            <span className={qualityErrors ? 'font-medium text-rose-700' : 'text-emerald-700'}>{qualityErrors.toLocaleString()} rows with Time Data Error</span>
-            <span className="text-slate-400">Invalid durations remain in detail but are excluded from KPIs and charts.</span>
+            {dashboardView === 'backfill' ? (
+              <>
+                <span className="font-medium text-amber-700">Departure and Arrival are both earlier than Dispatch</span>
+                <span className="text-slate-400">WO-to-Dispatch and valid Travel Time are calculated independently.</span>
+              </>
+            ) : (
+              <>
+                <span className={qualityErrors ? 'font-medium text-rose-700' : 'text-emerald-700'}>{qualityErrors.toLocaleString()} rows with Time Data Error</span>
+                <span className="text-slate-400">{backfilledRecords.length.toLocaleString()} backfilled rows are separated into the Backfilled cases view.</span>
+              </>
+            )}
           </div>
         )}
 
         <DashboardCharts
           woToDispatchTrend={woToDispatchTrend}
-          dispatchToArrivalTrend={dispatchToArrivalTrend}
+          dispatchToArrivalTrend={dashboardView === 'standard' ? dispatchToArrivalTrend : undefined}
           distribution={distribution}
         />
         <WorkOrderTable records={filteredRecords} />

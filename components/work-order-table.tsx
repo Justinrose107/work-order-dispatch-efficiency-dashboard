@@ -52,8 +52,13 @@ function cellContent(record: WorkOrderRecord, column: Column) {
   if (column.type === 'date') return formatDateTime(record.dates[column.key]);
   if (column.type === 'duration') return formatDuration(record.durations[column.key]);
   if (column.type === 'quality') {
+    const qualityStyle = record.qualityFlag === 'OK'
+      ? 'bg-emerald-50 text-emerald-700'
+      : record.qualityFlag === 'Backfilled Dispatch'
+        ? 'bg-amber-50 text-amber-700'
+        : 'bg-rose-50 text-rose-700';
     return (
-      <span className={`inline-flex whitespace-nowrap rounded-full px-2 py-1 text-[10px] font-semibold ${record.qualityFlag === 'OK' ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>
+      <span className={`inline-flex whitespace-nowrap rounded-full px-2 py-1 text-[10px] font-semibold ${qualityStyle}`}>
         {record.qualityFlag}
       </span>
     );

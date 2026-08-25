@@ -9,6 +9,7 @@ import {
   distinctCount,
   filterWorkOrderRecords,
   formatDuration,
+  isBackfilledWorkOrder,
   median,
   parseDateTime,
   recognizeHeaders,
@@ -93,6 +94,43 @@ test('flags negative time sequences and excludes their invalid duration', () => 
   assert.equal(record.durations.woToDispatch, null);
   assert.equal(record.qualityFlag, 'Time Data Error');
   assert.deepEqual(record.invalidDurationKeys, ['woToDispatch']);
+});
+
+test('classifies rows with both departure and arrival before dispatch as backfilled', () => {
+  const [afterCreated, beforeCreated, partialSequence] = buildWorkOrderRecords([
+    {
+      'Work Order Number': 'WO-B1',
+      'Created On': '2026-08-01 08:00',
+      'Dispatch Time': '2026-08-01 12:00',
+      'Departure Time': '2026-08-01 09:00',
+      'Arrival Time': '2026-08-01 10:00',
+    },
+    {
+      'Work Order Number': 'WO-B2',
+      'Created On': '2026-08-01 10:00',
+      'Dispatch Time': '2026-08-01 12:00',
+      'Departure Time': '2026-08-01 08:00',
+      'Arrival Time': '2026-08-01 09:00',
+    },
+    {
+      'Work Order Number': 'WO-E1',
+      'Created On': '2026-08-01 08:00',
+      'Dispatch Time': '2026-08-01 10:00',
+      'Departure Time': '2026-08-01 09:00',
+      'Arrival Time': '2026-08-01 11:00',
+    },
+  ]).records;
+
+  assert.equal(isBackfilledWorkOrder(afterCreated), true);
+  assert.equal(afterCreated.qualityFlag, 'Backfilled Dispatch');
+  assert.equal(afterCreated.durations.woToDispatch, 240);
+  assert.equal(afterCreated.durations.travelTime, 60);
+
+  assert.equal(isBackfilledWorkOrder(beforeCreated), true);
+  assert.equal(beforeCreated.qualityFlag, 'Backfilled Dispatch');
+
+  assert.equal(isBackfilledWorkOrder(partialSequence), false);
+  assert.equal(partialSequence.qualityFlag, 'Time Data Error');
 });
 
 test('counts distinct Case Number and Work Order Number independently', () => {
