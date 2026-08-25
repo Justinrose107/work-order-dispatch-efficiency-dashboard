@@ -7,6 +7,7 @@ import {
   buildWorkOrderRecords,
   defaultWorkOrderTypeSelection,
   distinctCount,
+  filterOptionValues,
   filterWorkOrderRecords,
   formatDuration,
   isBackfilledWorkOrder,
@@ -322,6 +323,26 @@ test('applies date and multi-select filters together', () => {
   });
   assert.equal(filtered.length, 2);
   assert.ok(filtered.every((record) => record.values['Work Order Number'] === 'WO-1'));
+});
+
+test('cascades filter options using the date range and all other selected fields', () => {
+  const records = buildWorkOrderRecords(rows).records;
+  const filters = {
+    dateFrom: '2026-08-01',
+    dateTo: '2026-08-03',
+    selections: {
+      'Service Region': ['East'],
+      Country: ['China'],
+    },
+  };
+
+  assert.deepEqual(filterOptionValues(records, filters, 'Country'), ['China', 'Japan']);
+  assert.deepEqual(filterOptionValues(records, filters, 'Service Region'), ['East', 'West']);
+  assert.deepEqual(filterOptionValues(records, filters, 'Work Order Type'), ['Repair']);
+
+  const dateScoped = { ...filters, dateFrom: '2026-08-02', dateTo: '2026-08-02' };
+  assert.deepEqual(filterOptionValues(records, dateScoped, 'Country'), ['China']);
+  assert.deepEqual(filterOptionValues(records, dateScoped, 'Service Region'), ['East', 'West']);
 });
 
 test('defaults Work Order Type to Repair when present, without hard-coding the source casing', () => {

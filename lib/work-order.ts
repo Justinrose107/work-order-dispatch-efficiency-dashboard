@@ -372,6 +372,29 @@ export function filterWorkOrderRecords(records: WorkOrderRecord[], filters: Work
   });
 }
 
+export function filterOptionValues(
+  records: WorkOrderRecord[],
+  filters: WorkOrderFilters,
+  field: FieldName,
+) {
+  const otherSelections = Object.fromEntries(
+    Object.entries(filters.selections ?? {}).filter(([selectedField]) => selectedField !== field),
+  ) as Partial<Record<FieldName, string[]>>;
+  const scopedRecords = filterWorkOrderRecords(records, {
+    ...filters,
+    selections: otherSelections,
+  });
+  const selectedValues = filters.selections?.[field] ?? [];
+
+  return Array.from(new Set([
+    ...selectedValues,
+    ...scopedRecords.map((record) => record.values[field]).filter(Boolean),
+  ])).sort((left, right) => left.localeCompare(right, undefined, {
+    numeric: true,
+    sensitivity: 'base',
+  }));
+}
+
 export function defaultWorkOrderTypeSelection(records: WorkOrderRecord[]) {
   const types = Array.from(
     new Set(records.map((record) => record.values['Work Order Type']).filter(Boolean)),

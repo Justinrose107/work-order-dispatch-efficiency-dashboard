@@ -25,6 +25,7 @@ import {
   average,
   distinctCount,
   defaultWorkOrderTypeSelection,
+  filterOptionValues,
   filterWorkOrderRecords,
   formatDuration,
   isBackfilledWorkOrder,
@@ -128,13 +129,15 @@ export default function Home() {
   const records = useMemo(() => imported?.records ?? [], [imported]);
   const dateBounds = useMemo(() => fileDateBounds(records), [records]);
 
-  const options = useMemo(() => Object.fromEntries(
-    FILTER_FIELDS.map((field) => [
-      field,
-      Array.from(new Set(records.map((record) => record.values[field]).filter(Boolean)))
-        .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' })),
-    ]),
-  ) as Record<FilterField, string[]>, [records]);
+  const options = useMemo(() => {
+    const activeFilters = { dateFrom, dateTo, selections: filters };
+    return Object.fromEntries(
+      FILTER_FIELDS.map((field) => [
+        field,
+        filterOptionValues(records, activeFilters, field),
+      ]),
+    ) as Record<FilterField, string[]>;
+  }, [dateFrom, dateTo, filters, records]);
 
   const filteredByUser = useMemo(() => filterWorkOrderRecords(records, {
     dateFrom,
