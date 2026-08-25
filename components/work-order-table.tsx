@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { ArrowDown, ArrowUp, ArrowUpDown, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ArrowDown, ArrowUp, ArrowUpDown, CalendarDays, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import {
   formatDateTime,
   formatDuration,
@@ -68,7 +68,15 @@ function cellContent(record: WorkOrderRecord, column: Column) {
   return record.values[column.key] || '—';
 }
 
-export function WorkOrderTable({ records }: { records: WorkOrderRecord[] }) {
+export function WorkOrderTable({
+  records,
+  drilldownDate,
+  onClearDrilldown,
+}: {
+  records: WorkOrderRecord[];
+  drilldownDate?: string;
+  onClearDrilldown?: () => void;
+}) {
   const [sortKey, setSortKey] = useState<string>('woToDispatch');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [page, setPage] = useState(1);
@@ -106,9 +114,20 @@ export function WorkOrderTable({ records }: { records: WorkOrderRecord[] }) {
       <div className="flex flex-col gap-3 border-b border-slate-100 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="font-semibold text-slate-900">Work Order Detail</h2>
-          <p className="mt-1 text-xs text-slate-500">Raw rows are retained · click any column title to sort</p>
+          <p className="mt-1 text-xs text-slate-500">
+            {drilldownDate ? `Created On ${drilldownDate} · ` : ''}Raw rows are retained · click any column title to sort
+          </p>
         </div>
         <div className="flex items-center gap-2 text-xs text-slate-500">
+          {drilldownDate && (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-cyan-50 px-2.5 py-1 font-semibold text-cyan-700">
+              <CalendarDays className="h-3.5 w-3.5" />
+              {drilldownDate}
+              <button type="button" onClick={onClearDrilldown} aria-label="Clear chart date filter" className="ml-0.5 rounded-full p-0.5 hover:bg-cyan-100">
+                <X className="h-3 w-3" />
+              </button>
+            </span>
+          )}
           <span className="rounded-full bg-slate-100 px-2.5 py-1 font-semibold text-slate-600">{records.length.toLocaleString()} rows</span>
           <span>Sorted by {columns.find((column) => column.key === sortKey)?.label}</span>
         </div>

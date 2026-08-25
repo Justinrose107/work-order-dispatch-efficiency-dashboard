@@ -116,6 +116,7 @@ function KpiCard({ label, value, note, icon, accent = false }: { label: string; 
 
 export default function Home() {
   const inputRef = useRef<HTMLInputElement>(null);
+  const detailRef = useRef<HTMLDivElement>(null);
   const [imported, setImported] = useState<ImportResult | null>(null);
   const [fileName, setFileName] = useState('');
   const [filters, setFilters] = useState<Filters>(emptyFilters);
@@ -125,6 +126,7 @@ export default function Home() {
   const [isImporting, setIsImporting] = useState(false);
   const [error, setError] = useState('');
   const [dashboardView, setDashboardView] = useState<DashboardView>('standard');
+  const [detailDate, setDetailDate] = useState('');
 
   const records = useMemo(() => imported?.records ?? [], [imported]);
   const dateBounds = useMemo(() => fileDateBounds(records), [records]);
@@ -154,6 +156,11 @@ export default function Home() {
     [filteredByUser],
   );
   const filteredRecords = dashboardView === 'backfill' ? backfilledRecords : standardRecords;
+  const detailRecords = useMemo(() => (
+    detailDate
+      ? filterWorkOrderRecords(filteredRecords, { dateFrom: detailDate, dateTo: detailDate })
+      : filteredRecords
+  ), [detailDate, filteredRecords]);
 
   const metrics = useMemo(() => ({
     woToDispatch: metricSummary(filteredRecords, 'woToDispatch'),
@@ -217,6 +224,7 @@ export default function Home() {
       setDateFrom(bounds.min);
       setDateTo(bounds.max);
       setDashboardView('standard');
+      setDetailDate('');
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'The file could not be imported.');
     } finally {
@@ -229,6 +237,7 @@ export default function Home() {
     setFilters(defaultFiltersFor(records));
     setDateFrom(dateBounds.min);
     setDateTo(dateBounds.max);
+    setDetailDate('');
   };
 
   const clearFile = () => {
@@ -239,6 +248,14 @@ export default function Home() {
     setDateTo('');
     setError('');
     setDashboardView('standard');
+    setDetailDate('');
+  };
+
+  const drillIntoDate = (date: string) => {
+    setDetailDate(date);
+    window.requestAnimationFrame(() => {
+      detailRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
   };
 
   const subtitle = records.length
@@ -328,7 +345,7 @@ export default function Home() {
               type="button"
               role="tab"
               aria-selected={dashboardView === 'standard'}
-              onClick={() => setDashboardView('standard')}
+              onClick={() => { setDashboardView('standard'); setDetailDate(''); }}
               className={`flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold transition ${dashboardView === 'standard' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
             >
               <LayoutDashboard className="h-4 w-4" />
@@ -339,7 +356,7 @@ export default function Home() {
               type="button"
               role="tab"
               aria-selected={dashboardView === 'backfill'}
-              onClick={() => setDashboardView('backfill')}
+              onClick={() => { setDashboardView('backfill'); setDetailDate(''); }}
               className={`flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold transition ${dashboardView === 'backfill' ? 'bg-amber-50 text-amber-800 shadow-sm ring-1 ring-amber-200' : 'text-slate-500 hover:text-slate-800'}`}
             >
               <History className="h-4 w-4" />
@@ -362,11 +379,11 @@ export default function Home() {
           <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-10">
             <label className="grid h-[58px] grid-cols-2 gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 xl:col-span-2">
               <span className="col-span-2 text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-400">Created On range</span>
-              <input type="date" value={dateFrom} min={dateBounds.min} max={dateTo || dateBounds.max} disabled={!dateBounds.min} onChange={(event) => setDateFrom(event.target.value)} aria-label="Created On start date" className="min-w-0 bg-transparent text-xs font-medium text-slate-700 outline-none disabled:text-slate-300" />
-              <input type="date" value={dateTo} min={dateFrom || dateBounds.min} max={dateBounds.max} disabled={!dateBounds.max} onChange={(event) => setDateTo(event.target.value)} aria-label="Created On end date" className="min-w-0 border-l border-slate-200 bg-transparent pl-2 text-xs font-medium text-slate-700 outline-none disabled:text-slate-300" />
+              <input type="date" value={dateFrom} min={dateBounds.min} max={dateTo || dateBounds.max} disabled={!dateBounds.min} onChange={(event) => { setDateFrom(event.target.value); setDetailDate(''); }} aria-label="Created On start date" className="min-w-0 bg-transparent text-xs font-medium text-slate-700 outline-none disabled:text-slate-300" />
+              <input type="date" value={dateTo} min={dateFrom || dateBounds.min} max={dateBounds.max} disabled={!dateBounds.max} onChange={(event) => { setDateTo(event.target.value); setDetailDate(''); }} aria-label="Created On end date" className="min-w-0 border-l border-slate-200 bg-transparent pl-2 text-xs font-medium text-slate-700 outline-none disabled:text-slate-300" />
             </label>
             {FILTER_FIELDS.map((field) => (
-              <MultiFilter key={field} label={FILTER_LABELS[field]} options={options[field]} selected={filters[field]} onChange={(values) => setFilters((current) => ({ ...current, [field]: values }))} />
+              <MultiFilter key={field} label={FILTER_LABELS[field]} options={options[field]} selected={filters[field]} onChange={(values) => { setFilters((current) => ({ ...current, [field]: values })); setDetailDate(''); }} />
             ))}
           </div>
         </section>
@@ -405,8 +422,17 @@ export default function Home() {
           woToDispatchTrend={woToDispatchTrend}
           dispatchToArrivalTrend={dashboardView === 'standard' ? dispatchToArrivalTrend : undefined}
           distribution={distribution}
+          selectedWoToDispatchDate={detailDate}
+          onWoToDispatchDateClick={drillIntoDate}
         />
-        <WorkOrderTable records={filteredRecords} />
+        <div ref={detailRef} className="scroll-mt-4">
+          <WorkOrderTable
+            key={`${dashboardView}-${detailDate || 'all'}`}
+            records={detailRecords}
+            drilldownDate={detailDate}
+            onClearDrilldown={() => setDetailDate('')}
+          />
+        </div>
       </div>
     </main>
   );

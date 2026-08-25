@@ -6,6 +6,7 @@ import {
   CartesianGrid,
   Line,
   LineChart,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -50,13 +51,27 @@ function DistributionTooltip({ active, payload }: { active?: boolean; payload?: 
   );
 }
 
-function TrendCard({ title, trend, color }: { title: string; trend: TrendPoint[]; color: string }) {
+function TrendCard({
+  title,
+  trend,
+  color,
+  selectedDate,
+  onDateClick,
+}: {
+  title: string;
+  trend: TrendPoint[];
+  color: string;
+  selectedDate?: string;
+  onDateClick?: (date: string) => void;
+}) {
   return (
     <article className="min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
       <div className="flex min-h-[76px] items-start justify-between gap-3 border-b border-slate-100 px-5 py-4">
         <div className="min-w-0">
           <h2 className="font-semibold leading-5 text-slate-900">{title}</h2>
-          <p className="mt-1 text-xs text-slate-500">Daily average · valid work orders only</p>
+          <p className="mt-1 text-xs text-slate-500">
+            Daily average · valid work orders only{onDateClick ? ' · click a date to inspect rows' : ''}
+          </p>
         </div>
         <span className="shrink-0 rounded-full bg-cyan-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-cyan-700">Created On</span>
       </div>
@@ -64,7 +79,15 @@ function TrendCard({ title, trend, color }: { title: string; trend: TrendPoint[]
         {!trend.length ? <EmptyChart message="No valid trend data for the current filters" /> : (
           <div className="h-[285px] w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={trend} margin={{ top: 8, right: 14, left: 0, bottom: 4 }}>
+              <LineChart
+                data={trend}
+                margin={{ top: 8, right: 14, left: 0, bottom: 4 }}
+                className={onDateClick ? 'cursor-pointer' : undefined}
+                onClick={(state) => {
+                  const date = state?.activeLabel;
+                  if (onDateClick && typeof date === 'string') onDateClick(date);
+                }}
+              >
                 <CartesianGrid stroke="#e8eef5" strokeDasharray="3 3" vertical={false} />
                 <XAxis dataKey="date" tick={axisStyle} tickLine={false} axisLine={{ stroke: '#dbe3ec' }} minTickGap={28} />
                 <YAxis tick={axisStyle} tickLine={false} axisLine={false} width={56} tickFormatter={(value) => formatDuration(Number(value))} />
@@ -73,6 +96,9 @@ function TrendCard({ title, trend, color }: { title: string; trend: TrendPoint[]
                   formatter={(value, _name, item) => [formatDuration(Number(value)), `Average (${item.payload.count} WO${item.payload.count === 1 ? '' : 's'})`]}
                   labelStyle={{ color: '#334155', fontWeight: 600, marginBottom: 4 }}
                 />
+                {selectedDate && (
+                  <ReferenceLine x={selectedDate} stroke="#0e7490" strokeDasharray="4 4" />
+                )}
                 <Line type="monotone" dataKey="average" stroke={color} strokeWidth={2.5} dot={{ r: 3, fill: color, strokeWidth: 2, stroke: '#fff' }} activeDot={{ r: 5 }} connectNulls={false} />
               </LineChart>
             </ResponsiveContainer>
@@ -83,12 +109,30 @@ function TrendCard({ title, trend, color }: { title: string; trend: TrendPoint[]
   );
 }
 
-export function DashboardCharts({ woToDispatchTrend, dispatchToArrivalTrend, distribution }: { woToDispatchTrend: TrendPoint[]; dispatchToArrivalTrend?: TrendPoint[]; distribution: DistributionPoint[] }) {
+export function DashboardCharts({
+  woToDispatchTrend,
+  dispatchToArrivalTrend,
+  distribution,
+  selectedWoToDispatchDate,
+  onWoToDispatchDateClick,
+}: {
+  woToDispatchTrend: TrendPoint[];
+  dispatchToArrivalTrend?: TrendPoint[];
+  distribution: DistributionPoint[];
+  selectedWoToDispatchDate?: string;
+  onWoToDispatchDateClick?: (date: string) => void;
+}) {
   const totalValid = distribution.reduce((sum, point) => sum + point.count, 0);
   const showDispatchToArrival = dispatchToArrivalTrend !== undefined;
   return (
     <section className={`grid gap-5 ${showDispatchToArrival ? 'xl:grid-cols-3' : 'lg:grid-cols-2'}`}>
-      <TrendCard title="Average WO-to-Dispatch Time Trend" trend={woToDispatchTrend} color="#0891b2" />
+      <TrendCard
+        title="Average WO-to-Dispatch Time Trend"
+        trend={woToDispatchTrend}
+        color="#0891b2"
+        selectedDate={selectedWoToDispatchDate}
+        onDateClick={onWoToDispatchDateClick}
+      />
       {showDispatchToArrival && (
         <TrendCard title="Average Dispatch-to-Arrival Time Trend" trend={dispatchToArrivalTrend} color="#4f46e5" />
       )}
