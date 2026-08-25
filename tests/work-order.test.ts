@@ -71,14 +71,14 @@ const rows = [
 test('recognizes supported headers without manual mapping', () => {
   const result = recognizeHeaders([
     ' case-number ',
-    'WORK ORDER NUMBER',
+    'Work Order Number（Required）',
     'Service Team Dispatch Officer - Reference',
     'Service Crew Dispatcher',
     'Order Dispatcher',
     'Unknown Field',
   ]);
   assert.equal(result.mapping.get('Case Number'), ' case-number ');
-  assert.equal(result.mapping.get('Work Order Number'), 'WORK ORDER NUMBER');
+  assert.equal(result.mapping.get('Work Order Number'), 'Work Order Number（Required）');
   assert.equal(result.mapping.get('Service Team Dispatch Officer - Reference'), 'Service Team Dispatch Officer - Reference');
   assert.equal(result.mapping.get('Service Crew Dispatcher'), 'Service Crew Dispatcher');
   assert.equal(result.mapping.get('Order Dispatcher'), 'Order Dispatcher');

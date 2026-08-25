@@ -97,6 +97,7 @@ const normalizeHeader = (value: unknown) =>
     .replace(/^\uFEFF/, '')
     .trim()
     .toLowerCase()
+    .replace(/[（(]\s*required\s*[）)]/g, '')
     .replace(/[\s_\-–—]+/g, '');
 
 const normalizedFields = new Map(
