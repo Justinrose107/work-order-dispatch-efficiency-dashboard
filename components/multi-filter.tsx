@@ -41,7 +41,7 @@ export function MultiFilter({ label, options, selected, onChange }: MultiFilterP
         </span>
         <ChevronDown className="h-4 w-4 shrink-0 text-slate-400 transition-transform" />
       </summary>
-      <div className="absolute left-0 z-40 mt-2 w-64 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl shadow-slate-900/10">
+      <div className="absolute left-0 z-40 mt-2 w-64 overflow-clip rounded-xl border border-slate-200 bg-white shadow-xl shadow-slate-900/10">
         <div className="flex items-center justify-between border-b border-slate-100 px-3 py-2">
           <span className="text-xs font-semibold text-slate-500">{options.length} options</span>
           {selected.length > 0 && (
@@ -66,7 +66,7 @@ export function MultiFilter({ label, options, selected, onChange }: MultiFilterP
             )}
           </label>
         </div>
-        <div className="max-h-64 overflow-y-auto p-1.5">
+        <div className="max-h-64 overscroll-contain overflow-y-auto p-1.5">
           {visibleOptions.length ? visibleOptions.map((option) => {
             const checked = selected.includes(option);
             return (
