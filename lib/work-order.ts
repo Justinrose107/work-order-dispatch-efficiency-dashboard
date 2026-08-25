@@ -63,7 +63,9 @@ function datesShowBackfilledDispatch(dates: Record<DateField, Date | null>) {
   const departure = dates['Departure Time'];
   const arrival = dates['Arrival Time'];
   if (!dispatch) return false;
-  if (departure) return departure < dispatch;
+  if (departure) {
+    return departure < dispatch || Boolean(arrival && arrival < departure);
+  }
   return Boolean(arrival && arrival < dispatch);
 }
 
@@ -235,7 +237,6 @@ export function buildWorkOrderRecords(rows: Record<string, unknown>[]): ParsedRo
       'dispatchToDeparture',
       'travelTime',
       'dispatchToArrival',
-      'arrivalToClose',
     ];
     const invalidDurationKeys = checkedKeys.filter(
       (key) => rawDurations[key] != null && rawDurations[key]! < 0,
