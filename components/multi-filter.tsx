@@ -1,6 +1,7 @@
 'use client';
 
-import { Check, ChevronDown } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { Check, ChevronDown, Search, X } from 'lucide-react';
 
 interface MultiFilterProps {
   label: string;
@@ -10,11 +11,18 @@ interface MultiFilterProps {
 }
 
 export function MultiFilter({ label, options, selected, onChange }: MultiFilterProps) {
+  const [query, setQuery] = useState('');
   const displayValue = !selected.length
     ? 'All'
     : selected.length === 1
       ? selected[0]
       : `${selected.length} selected`;
+  const visibleOptions = useMemo(() => {
+    const normalizedQuery = query.trim().toLocaleLowerCase();
+    return normalizedQuery
+      ? options.filter((option) => option.toLocaleLowerCase().includes(normalizedQuery))
+      : options;
+  }, [options, query]);
 
   const toggle = (option: string) => {
     onChange(
@@ -28,7 +36,7 @@ export function MultiFilter({ label, options, selected, onChange }: MultiFilterP
     <details className="filter-details relative min-w-0">
       <summary className="flex h-[58px] list-none items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-3.5 text-left transition hover:border-slate-300 hover:shadow-sm">
         <span className="min-w-0">
-          <span className="block text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-400">{label}</span>
+          <span className="block truncate text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-400" title={label}>{label}</span>
           <span className="mt-1 block truncate text-sm font-medium text-slate-700">{displayValue}</span>
         </span>
         <ChevronDown className="h-4 w-4 shrink-0 text-slate-400 transition-transform" />
@@ -40,8 +48,26 @@ export function MultiFilter({ label, options, selected, onChange }: MultiFilterP
             <button type="button" onClick={() => onChange([])} className="text-xs font-semibold text-cyan-700 hover:text-cyan-800">Clear</button>
           )}
         </div>
+        <div className="border-b border-slate-100 p-2">
+          <label className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2 focus-within:border-cyan-500 focus-within:bg-white focus-within:ring-2 focus-within:ring-cyan-100">
+            <Search className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+            <input
+              type="search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Type to search"
+              aria-label={`Search ${label}`}
+              className="min-w-0 flex-1 bg-transparent text-xs text-slate-700 outline-none placeholder:text-slate-400"
+            />
+            {query && (
+              <button type="button" onClick={() => setQuery('')} aria-label={`Clear ${label} search`} className="text-slate-400 hover:text-slate-700">
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </label>
+        </div>
         <div className="max-h-64 overflow-y-auto p-1.5">
-          {options.length ? options.map((option) => {
+          {visibleOptions.length ? visibleOptions.map((option) => {
             const checked = selected.includes(option);
             return (
               <label key={option} className="flex cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm text-slate-700 hover:bg-slate-50">
@@ -53,7 +79,7 @@ export function MultiFilter({ label, options, selected, onChange }: MultiFilterP
               </label>
             );
           }) : (
-            <p className="px-3 py-4 text-center text-xs text-slate-400">No values in this file</p>
+            <p className="px-3 py-4 text-center text-xs text-slate-400">{options.length ? 'No matching values' : 'No values in this file'}</p>
           )}
         </div>
       </div>

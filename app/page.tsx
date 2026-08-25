@@ -49,6 +49,7 @@ const FILTER_FIELDS = [
   'Modality',
   'Priority',
   'Main Engineer',
+  'Service Crew Dispatcher',
   'Work Order Type',
   'Work Order Subtype',
 ] as const satisfies readonly FieldName[];
@@ -63,6 +64,7 @@ const FILTER_LABELS: Record<FilterField, string> = {
   Modality: 'Modality',
   Priority: 'Priority',
   'Main Engineer': 'Main Engineer',
+  'Service Crew Dispatcher': 'Service Crew Dispatcher',
   'Work Order Type': 'Work Order Type',
   'Work Order Subtype': 'WO Subtype',
 };
@@ -181,12 +183,17 @@ export default function Home() {
     });
   }, [filteredRecords]);
 
-  const qualityErrors = filteredRecords.filter((record) => record.qualityFlag === 'Time Data Error').length;
+  const timeDataErrors = filteredRecords.filter((record) => record.qualityFlag === 'Time Data Error').length;
+  const dispatcherDataErrors = filteredRecords.filter((record) => record.qualityFlag === 'Dispatcher Data Error').length;
   const selectedFilterCount = FILTER_FIELDS.reduce((sum, field) => sum + filters[field].length, 0);
   const requiredFields = ['Case Number', 'Work Order Number', 'Created On', 'Dispatch Time'] as const;
   const missingRequired = imported
     ? requiredFields.filter((field) => !imported.recognizedFields.includes(field))
     : [];
+  const missingDispatcherFields = imported
+    ? !imported.recognizedFields.includes('Service Crew Dispatcher')
+      && !imported.recognizedFields.includes('Order Dispatcher')
+    : false;
 
   const defaultFiltersFor = (nextRecords: WorkOrderRecord[]) => {
     const next = emptyFilters();
@@ -301,6 +308,12 @@ export default function Home() {
             <span>Missing core field{missingRequired.length > 1 ? 's' : ''}: {missingRequired.join(', ')}. Available metrics remain usable; affected values show N/A.</span>
           </div>
         )}
+        {records.length > 0 && missingDispatcherFields && (
+          <div role="status" className="flex items-start gap-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>Neither Service Crew Dispatcher nor Order Dispatcher was found. These rows are marked as Dispatcher Data Error and excluded from KPIs and charts.</span>
+          </div>
+        )}
 
         <section className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:flex-row sm:items-center sm:justify-between">
           <div className="px-1">
@@ -343,7 +356,7 @@ export default function Home() {
               <RotateCcw className="h-3.5 w-3.5" /> Reset filters {selectedFilterCount > 0 && `(${selectedFilterCount})`}
             </button>
           </div>
-          <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-9">
+          <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-10">
             <label className="grid h-[58px] grid-cols-2 gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 xl:col-span-2">
               <span className="col-span-2 text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-400">Created On range</span>
               <input type="date" value={dateFrom} min={dateBounds.min} max={dateTo || dateBounds.max} disabled={!dateBounds.min} onChange={(event) => setDateFrom(event.target.value)} aria-label="Created On start date" className="min-w-0 bg-transparent text-xs font-medium text-slate-700 outline-none disabled:text-slate-300" />
@@ -371,15 +384,17 @@ export default function Home() {
             <span className="h-3 w-px bg-slate-200" />
             {dashboardView === 'backfill' ? (
               <>
-                <span className="font-medium text-amber-700">Departure is earlier than Dispatch, or missing Departure with Arrival earlier than Dispatch</span>
+                <span className="font-medium text-amber-700">Includes field activity before Dispatch and Arrival earlier than Departure</span>
                 <span className="text-slate-400">WO-to-Dispatch and valid Travel Time are calculated independently.</span>
               </>
             ) : (
               <>
-                <span className={qualityErrors ? 'font-medium text-rose-700' : 'text-emerald-700'}>{qualityErrors.toLocaleString()} rows with Time Data Error</span>
+                <span className={timeDataErrors ? 'font-medium text-rose-700' : 'text-emerald-700'}>{timeDataErrors.toLocaleString()} rows with Time Data Error</span>
                 <span className="text-slate-400">{backfilledRecords.length.toLocaleString()} backfilled rows are separated into the Backfilled cases view.</span>
               </>
             )}
+            <span className={dispatcherDataErrors ? 'font-medium text-rose-700' : 'text-emerald-700'}>{dispatcherDataErrors.toLocaleString()} rows with Dispatcher Data Error</span>
+            <span className="text-slate-400">Dispatcher errors remain visible in detail but are excluded from all calculations.</span>
           </div>
         )}
 

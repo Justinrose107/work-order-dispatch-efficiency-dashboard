@@ -21,6 +21,9 @@ export const FIELD_NAMES = [
   'Warranty Status',
   'Main Engineer',
   'Reassign Engineer',
+  'Service Team Dispatch Officer - Reference',
+  'Service Crew Dispatcher',
+  'Order Dispatcher',
   'Priority',
 ] as const;
 
@@ -55,7 +58,17 @@ export interface WorkOrderRecord {
   dates: Record<DateField, Date | null>;
   durations: Record<DurationKey, number | null>;
   invalidDurationKeys: DurationKey[];
-  qualityFlag: 'OK' | 'Backfilled Dispatch' | 'Time Data Error';
+  qualityFlag: 'OK' | 'Backfilled Dispatch' | 'Time Data Error' | 'Dispatcher Data Error';
+}
+
+function effectiveServiceCrewDispatcher(values: Record<FieldName, string>) {
+  const serviceCrewDispatcher = values['Service Crew Dispatcher'];
+  if (serviceCrewDispatcher) return serviceCrewDispatcher;
+
+  const orderDispatcher = values['Order Dispatcher'];
+  return orderDispatcher && orderDispatcher.toLowerCase() !== 'system'
+    ? orderDispatcher
+    : '';
 }
 
 function datesShowBackfilledDispatch(dates: Record<DateField, Date | null>) {
@@ -214,6 +227,7 @@ export function buildWorkOrderRecords(rows: Record<string, unknown>[]): ParsedRo
         return [field, value == null ? '' : String(value).trim()];
       }),
     ) as Record<FieldName, string>;
+    values['Service Crew Dispatcher'] = effectiveServiceCrewDispatcher(values);
 
     const dates = Object.fromEntries(
       DATE_FIELDS.map((field) => {
@@ -251,6 +265,7 @@ export function buildWorkOrderRecords(rows: Record<string, unknown>[]): ParsedRo
       arrivalToClose: validDuration(dates['Arrival Time'], dates['Work Order Closed Time']),
     };
     const isBackfilled = datesShowBackfilledDispatch(dates);
+    const hasDispatcherError = !values['Service Crew Dispatcher'];
 
     return {
       id,
@@ -259,11 +274,13 @@ export function buildWorkOrderRecords(rows: Record<string, unknown>[]): ParsedRo
       dates,
       durations,
       invalidDurationKeys,
-      qualityFlag: isBackfilled
-        ? 'Backfilled Dispatch'
-        : invalidDurationKeys.length
-          ? 'Time Data Error'
-          : 'OK',
+      qualityFlag: hasDispatcherError
+        ? 'Dispatcher Data Error'
+        : isBackfilled
+          ? 'Backfilled Dispatch'
+          : invalidDurationKeys.length
+            ? 'Time Data Error'
+            : 'OK',
     } satisfies WorkOrderRecord;
   });
 
@@ -288,8 +305,17 @@ export function average(values: Array<number | null | undefined>) {
   return valid.length ? valid.reduce((total, value) => total + value, 0) / valid.length : null;
 }
 
+export function isCalculationEligible(record: WorkOrderRecord) {
+  return record.qualityFlag !== 'Dispatcher Data Error';
+}
+
 export function distinctCount(records: WorkOrderRecord[], field: 'Case Number' | 'Work Order Number') {
-  return new Set(records.map((record) => record.values[field]).filter(Boolean)).size;
+  return new Set(
+    records
+      .filter(isCalculationEligible)
+      .map((record) => record.values[field])
+      .filter(Boolean),
+  ).size;
 }
 
 export interface WorkOrderMetricEntry {
@@ -301,6 +327,7 @@ export interface WorkOrderMetricEntry {
 export function workOrderMetricEntries(records: WorkOrderRecord[], key: DurationKey) {
   const entries = new Map<string, WorkOrderMetricEntry>();
   for (const record of records) {
+    if (!isCalculationEligible(record)) continue;
     const workOrderNumber = record.values['Work Order Number'];
     const value = record.durations[key];
     if (!workOrderNumber || value == null || entries.has(workOrderNumber)) continue;

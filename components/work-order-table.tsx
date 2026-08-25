@@ -26,6 +26,8 @@ const columns: Column[] = [
   { key: 'Modality', label: 'Modality', type: 'value' },
   { key: 'Priority', label: 'Priority', type: 'value' },
   { key: 'Main Engineer', label: 'Main Engineer', type: 'value' },
+  { key: 'Service Crew Dispatcher', label: 'Service Crew Dispatcher', type: 'value' },
+  { key: 'Order Dispatcher', label: 'Order Dispatcher', type: 'value' },
   { key: 'Work Order Type', label: 'WO Type', type: 'value' },
   { key: 'Work Order Subtype', label: 'WO Subtype', type: 'value' },
   { key: 'Created On', label: 'Created On', type: 'date' },

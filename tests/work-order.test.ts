@@ -10,6 +10,7 @@ import {
   filterWorkOrderRecords,
   formatDuration,
   isBackfilledWorkOrder,
+  isCalculationEligible,
   median,
   parseDateTime,
   recognizeHeaders,
@@ -28,6 +29,7 @@ const rows = [
     'Service Region': 'East',
     Country: 'China',
     'Work Order Type': 'Repair',
+    'Service Crew Dispatcher': 'Dispatcher A',
   },
   {
     'Case Number': 'C-1',
@@ -40,6 +42,7 @@ const rows = [
     'Service Region': 'West',
     Country: 'China',
     'Work Order Type': 'Installation',
+    'Service Crew Dispatcher': 'Dispatcher B',
   },
   {
     'Case Number': 'C-2',
@@ -51,6 +54,7 @@ const rows = [
     'Service Region': 'East',
     Country: 'Japan',
     'Work Order Type': 'repair',
+    'Service Crew Dispatcher': 'Dispatcher A',
   },
   {
     'Case Number': 'C-1',
@@ -60,13 +64,24 @@ const rows = [
     'Service Region': 'East',
     Country: 'China',
     'Work Order Type': 'Repair',
+    'Service Crew Dispatcher': 'Dispatcher A',
   },
 ];
 
 test('recognizes supported headers without manual mapping', () => {
-  const result = recognizeHeaders([' case-number ', 'WORK ORDER NUMBER', 'Unknown Field']);
+  const result = recognizeHeaders([
+    ' case-number ',
+    'WORK ORDER NUMBER',
+    'Service Team Dispatch Officer - Reference',
+    'Service Crew Dispatcher',
+    'Order Dispatcher',
+    'Unknown Field',
+  ]);
   assert.equal(result.mapping.get('Case Number'), ' case-number ');
   assert.equal(result.mapping.get('Work Order Number'), 'WORK ORDER NUMBER');
+  assert.equal(result.mapping.get('Service Team Dispatch Officer - Reference'), 'Service Team Dispatch Officer - Reference');
+  assert.equal(result.mapping.get('Service Crew Dispatcher'), 'Service Crew Dispatcher');
+  assert.equal(result.mapping.get('Order Dispatcher'), 'Order Dispatcher');
   assert.deepEqual(result.unrecognizedHeaders, ['Unknown Field']);
 });
 
@@ -172,7 +187,7 @@ test('classifies backfilled rows using dispatch order and negative travel time',
       'Arrival Time': '2026-08-01 12:00',
       'Work Order Closed Time': '2026-08-01 11:30',
     },
-  ]).records;
+  ].map((row) => ({ 'Service Crew Dispatcher': 'Dispatcher A', ...row }))).records;
 
   assert.equal(isBackfilledWorkOrder(afterCreated), true);
   assert.equal(afterCreated.qualityFlag, 'Backfilled Dispatch');
@@ -217,6 +232,54 @@ test('classifies backfilled rows using dispatch order and negative travel time',
   assert.equal(closedBeforeArrival.durations.dispatchToArrival, 120);
   assert.equal(closedBeforeArrival.durations.arrivalToClose, null);
   assert.deepEqual(closedBeforeArrival.invalidDurationKeys, []);
+});
+
+test('resolves Service Crew Dispatcher and excludes missing dispatcher rows from calculations', () => {
+  const [direct, fallback, missing, systemFallback] = buildWorkOrderRecords([
+    {
+      'Case Number': 'C-D1',
+      'Work Order Number': 'WO-D1',
+      'Created On': '2026-08-01 08:00',
+      'Dispatch Time': '2026-08-01 09:00',
+      'Service Crew Dispatcher': 'Alice',
+      'Order Dispatcher': 'Bob',
+    },
+    {
+      'Case Number': 'C-D2',
+      'Work Order Number': 'WO-D2',
+      'Created On': '2026-08-01 08:00',
+      'Dispatch Time': '2026-08-01 09:00',
+      'Service Crew Dispatcher': '',
+      'Order Dispatcher': 'Bob',
+    },
+    {
+      'Case Number': 'C-D3',
+      'Work Order Number': 'WO-D3',
+      'Created On': '2026-08-01 08:00',
+      'Dispatch Time': '2026-08-01 09:00',
+      'Service Crew Dispatcher': '',
+      'Order Dispatcher': '',
+    },
+    {
+      'Case Number': 'C-D4',
+      'Work Order Number': 'WO-D4',
+      'Created On': '2026-08-01 08:00',
+      'Dispatch Time': '2026-08-01 09:00',
+      'Service Crew Dispatcher': '',
+      'Order Dispatcher': 'SYSTEM',
+    },
+  ]).records;
+
+  assert.equal(direct.values['Service Crew Dispatcher'], 'Alice');
+  assert.equal(direct.qualityFlag, 'OK');
+  assert.equal(fallback.values['Service Crew Dispatcher'], 'Bob');
+  assert.equal(fallback.qualityFlag, 'OK');
+  assert.equal(missing.qualityFlag, 'Dispatcher Data Error');
+  assert.equal(systemFallback.qualityFlag, 'Dispatcher Data Error');
+  assert.equal(isCalculationEligible(missing), false);
+  assert.equal(isCalculationEligible(systemFallback), false);
+  assert.equal(workOrderMetricEntries([direct, fallback, missing, systemFallback], 'woToDispatch').length, 2);
+  assert.equal(distinctCount([direct, fallback, missing, systemFallback], 'Case Number'), 2);
 });
 
 test('counts distinct Case Number and Work Order Number independently', () => {
