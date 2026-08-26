@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as XLSX from 'xlsx';
 import { parseWorkbookData } from '../lib/import-data.ts';
+import { DISPATCHER_DIRECTORY, resolveDispatcherProfile } from '../lib/dispatcher-directory.ts';
 import {
   average,
   buildWorkOrderRecords,
@@ -281,6 +282,23 @@ test('resolves Service Crew Dispatcher and excludes missing dispatcher rows from
   assert.equal(isCalculationEligible(systemFallback), false);
   assert.equal(workOrderMetricEntries([direct, fallback, missing, systemFallback], 'woToDispatch').length, 2);
   assert.equal(distinctCount([direct, fallback, missing, systemFallback], 'Case Number'), 2);
+});
+
+test('maps dispatcher names to the embedded personnel department directory', () => {
+  assert.equal(DISPATCHER_DIRECTORY.length, 888);
+  assert.equal(resolveDispatcherProfile('Adarsh Vijayakumar')?.name, 'Adarsh_Vijayakumar');
+  assert.equal(resolveDispatcherProfile('Adarsh_Vijayakumar')?.department, 'ISC_CC');
+
+  const [record] = buildWorkOrderRecords([{
+    'Work Order Number': 'WO-DEPT-1',
+    'Created On': '2026-08-01 08:00',
+    'Dispatch Time': '2026-08-01 09:00',
+    'Service Crew Dispatcher': 'Adarsh Vijayakumar',
+  }]).records;
+
+  assert.equal(record.values['Service Crew Dispatcher'], 'Adarsh_Vijayakumar');
+  assert.equal(record.values['Dispatcher Department'], 'ISC_CC');
+  assert.equal(record.qualityFlag, 'OK');
 });
 
 test('counts distinct Case Number and Work Order Number independently', () => {

@@ -1,3 +1,5 @@
+import { resolveDispatcherProfile } from './dispatcher-directory.ts';
+
 export const FIELD_NAMES = [
   'Case Number',
   'Work Order Number',
@@ -23,6 +25,7 @@ export const FIELD_NAMES = [
   'Reassign Engineer',
   'Service Team Dispatch Officer - Reference',
   'Service Crew Dispatcher',
+  'Dispatcher Department',
   'Order Dispatcher',
   'Priority',
 ] as const;
@@ -228,7 +231,11 @@ export function buildWorkOrderRecords(rows: Record<string, unknown>[]): ParsedRo
         return [field, value == null ? '' : String(value).trim()];
       }),
     ) as Record<FieldName, string>;
-    values['Service Crew Dispatcher'] = effectiveServiceCrewDispatcher(values);
+    const dispatcher = effectiveServiceCrewDispatcher(values);
+    const dispatcherProfile = resolveDispatcherProfile(dispatcher);
+    values['Service Crew Dispatcher'] = dispatcherProfile?.name ?? dispatcher;
+    values['Dispatcher Department'] = dispatcherProfile?.department
+      ?? values['Dispatcher Department'];
 
     const dates = Object.fromEntries(
       DATE_FIELDS.map((field) => {

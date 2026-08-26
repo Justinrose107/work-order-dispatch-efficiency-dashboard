@@ -5,6 +5,7 @@ import dynamic from 'next/dynamic';
 import {
   AlertTriangle,
   BriefcaseBusiness,
+  Building2,
   CheckCircle2,
   Clock3,
   FileSpreadsheet,
@@ -21,6 +22,7 @@ import type { DistributionPoint, TrendPoint } from '@/components/dashboard-chart
 import { MultiFilter } from '@/components/multi-filter';
 import { WorkOrderTable } from '@/components/work-order-table';
 import { importWorkOrderFile, type ImportResult } from '@/lib/import-data';
+import { resolveDispatcherProfile } from '@/lib/dispatcher-directory';
 import {
   average,
   distinctCount,
@@ -51,6 +53,7 @@ const FILTER_FIELDS = [
   'Priority',
   'Main Engineer',
   'Service Crew Dispatcher',
+  'Dispatcher Department',
   'Work Order Type',
   'Work Order Subtype',
 ] as const satisfies readonly FieldName[];
@@ -66,6 +69,7 @@ const FILTER_LABELS: Record<FilterField, string> = {
   Priority: 'Priority',
   'Main Engineer': 'Main Engineer',
   'Service Crew Dispatcher': 'Service Crew Dispatcher',
+  'Dispatcher Department': 'Dispatcher Department',
   'Work Order Type': 'Work Order Type',
   'Work Order Subtype': 'WO Subtype',
 };
@@ -177,6 +181,20 @@ export default function Home() {
     () => dailyAverageTrend(filteredRecords, 'dispatchToArrival'),
     [filteredRecords],
   );
+
+  const selectedDispatcherProfiles = useMemo(() => (
+    filters['Service Crew Dispatcher'].map((dispatcher) => {
+      const profile = resolveDispatcherProfile(dispatcher);
+      const recordDepartment = records.find(
+        (record) => record.values['Service Crew Dispatcher'] === dispatcher,
+      )?.values['Dispatcher Department'];
+      return {
+        dispatcher,
+        department: profile?.department || recordDepartment || 'Department not mapped',
+        departmentPath: profile?.primaryDepartment || recordDepartment || '',
+      };
+    })
+  ), [filters, records]);
 
   const distribution = useMemo<DistributionPoint[]>(() => {
     const bins = [
@@ -376,7 +394,7 @@ export default function Home() {
               <RotateCcw className="h-3.5 w-3.5" /> Reset filters {selectedFilterCount > 0 && `(${selectedFilterCount})`}
             </button>
           </div>
-          <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-10">
+          <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-11">
             <label className="grid h-[58px] grid-cols-2 gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 xl:col-span-2">
               <span className="col-span-2 text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-400">Created On range</span>
               <input type="date" value={dateFrom} min={dateBounds.min} max={dateTo || dateBounds.max} disabled={!dateBounds.min} onChange={(event) => { setDateFrom(event.target.value); setDetailDate(''); }} aria-label="Created On start date" className="min-w-0 bg-transparent text-xs font-medium text-slate-700 outline-none disabled:text-slate-300" />
@@ -386,6 +404,25 @@ export default function Home() {
               <MultiFilter key={field} label={FILTER_LABELS[field]} options={options[field]} selected={filters[field]} onChange={(values) => { setFilters((current) => ({ ...current, [field]: values })); setDetailDate(''); }} />
             ))}
           </div>
+          {selectedDispatcherProfiles.length > 0 && (
+            <div className="mt-3 flex flex-wrap items-center gap-2 rounded-xl border border-cyan-100 bg-cyan-50/60 px-3 py-2.5">
+              <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-cyan-800">
+                <Building2 className="h-3.5 w-3.5" />
+                Dispatcher department
+              </span>
+              {selectedDispatcherProfiles.map((profile) => (
+                <span
+                  key={profile.dispatcher}
+                  title={profile.departmentPath}
+                  className="rounded-full border border-cyan-200 bg-white px-2.5 py-1 text-xs text-slate-700 shadow-sm"
+                >
+                  <span className="font-semibold">{profile.dispatcher}</span>
+                  <span className="mx-1.5 text-slate-300">→</span>
+                  <span>{profile.department}</span>
+                </span>
+              ))}
+            </div>
+          )}
         </section>
 
         <section className={`grid gap-3 sm:grid-cols-2 ${dashboardView === 'backfill' ? 'xl:grid-cols-4' : 'lg:grid-cols-3 xl:grid-cols-6'}`}>
