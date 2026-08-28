@@ -234,7 +234,7 @@ export function buildWorkOrderRecords(rows: Record<string, unknown>[]): ParsedRo
     const dispatcher = effectiveServiceCrewDispatcher(values);
     const dispatcherProfile = resolveDispatcherProfile(dispatcher);
     values['Service Crew Dispatcher'] = dispatcherProfile?.name ?? dispatcher;
-    values['Dispatcher Department'] = dispatcherProfile?.department
+    values['Dispatcher Department'] = dispatcherProfile?.primaryDepartment
       ?? values['Dispatcher Department'];
 
     const dates = Object.fromEntries(

@@ -190,7 +190,7 @@ export default function Home() {
       )?.values['Dispatcher Department'];
       return {
         dispatcher,
-        department: profile?.department || recordDepartment || 'Department not mapped',
+        department: profile?.primaryDepartment || recordDepartment || 'Department not mapped',
         departmentPath: profile?.primaryDepartment || recordDepartment || '',
       };
     })

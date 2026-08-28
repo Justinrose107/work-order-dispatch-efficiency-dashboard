@@ -288,6 +288,10 @@ test('maps dispatcher names to the embedded personnel department directory', () 
   assert.equal(DISPATCHER_DIRECTORY.length, 888);
   assert.equal(resolveDispatcherProfile('Adarsh Vijayakumar')?.name, 'Adarsh_Vijayakumar');
   assert.equal(resolveDispatcherProfile('Adarsh_Vijayakumar')?.department, 'ISC_CC');
+  assert.equal(
+    resolveDispatcherProfile('Faraj Tamer')?.primaryDepartment,
+    '联影医疗/ICS/EUB/CEE_CS/CEE_DT/Fusion Med (Romania)',
+  );
 
   const [record] = buildWorkOrderRecords([{
     'Work Order Number': 'WO-DEPT-1',
@@ -297,7 +301,7 @@ test('maps dispatcher names to the embedded personnel department directory', () 
   }]).records;
 
   assert.equal(record.values['Service Crew Dispatcher'], 'Adarsh_Vijayakumar');
-  assert.equal(record.values['Dispatcher Department'], 'ISC_CC');
+  assert.equal(record.values['Dispatcher Department'], '联影医疗/ICS/ISC/ISC_CC');
   assert.equal(record.qualityFlag, 'OK');
 });
 
