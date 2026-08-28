@@ -69,6 +69,10 @@ function cellContent(record: WorkOrderRecord, column: Column) {
   return record.values[column.key] || '—';
 }
 
+function isDispatcherDepartmentColumn(column: Column) {
+  return column.type === 'value' && column.key === 'Dispatcher Department';
+}
+
 export function WorkOrderTable({
   records,
   drilldownDate,
@@ -138,7 +142,10 @@ export function WorkOrderTable({
           <thead className="sticky top-0 z-20 bg-slate-50/95 backdrop-blur-sm">
             <tr>
               {columns.map((column) => (
-                <th key={`${column.type}-${column.key}`} className="whitespace-nowrap border-b border-slate-200 px-3 py-3 font-semibold text-slate-600">
+                <th
+                  key={`${column.type}-${column.key}`}
+                  className={`border-b border-slate-200 px-3 py-3 font-semibold text-slate-600 ${isDispatcherDepartmentColumn(column) ? 'w-80 min-w-80 max-w-80' : 'whitespace-nowrap'}`}
+                >
                   <button type="button" onClick={() => sort(column.key)} className="flex items-center gap-1.5 hover:text-slate-950">
                     {column.label}
                     {sortKey === column.key
@@ -153,7 +160,11 @@ export function WorkOrderTable({
             {pageRows.length ? pageRows.map((record) => (
               <tr key={record.id} className="odd:bg-white even:bg-slate-50/40 hover:bg-cyan-50/50">
                 {columns.map((column) => (
-                  <td key={`${record.id}-${column.type}-${column.key}`} className={`max-w-56 whitespace-nowrap border-b border-slate-100 px-3 py-2.5 text-slate-700 ${column.type === 'duration' ? 'font-medium tabular-nums' : ''}`} title={typeof cellContent(record, column) === 'string' ? String(cellContent(record, column)) : undefined}>
+                  <td
+                    key={`${record.id}-${column.type}-${column.key}`}
+                    className={`border-b border-slate-100 px-3 py-2.5 text-slate-700 ${isDispatcherDepartmentColumn(column) ? 'w-80 min-w-80 max-w-80 whitespace-normal break-words leading-5 [overflow-wrap:anywhere]' : 'max-w-56 overflow-hidden text-ellipsis whitespace-nowrap'} ${column.type === 'duration' ? 'font-medium tabular-nums' : ''}`}
+                    title={typeof cellContent(record, column) === 'string' ? String(cellContent(record, column)) : undefined}
+                  >
                     {cellContent(record, column)}
                   </td>
                 ))}
