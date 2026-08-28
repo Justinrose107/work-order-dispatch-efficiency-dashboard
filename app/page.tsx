@@ -459,8 +459,8 @@ export default function Home() {
           woToDispatchTrend={woToDispatchTrend}
           dispatchToArrivalTrend={dashboardView === 'standard' ? dispatchToArrivalTrend : undefined}
           distribution={distribution}
-          selectedWoToDispatchDate={detailDate}
-          onWoToDispatchDateClick={drillIntoDate}
+          selectedDate={detailDate}
+          onDateClick={drillIntoDate}
         />
         <div ref={detailRef} className="scroll-mt-4">
           <WorkOrderTable

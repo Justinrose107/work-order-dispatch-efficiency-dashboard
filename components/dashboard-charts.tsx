@@ -113,14 +113,14 @@ export function DashboardCharts({
   woToDispatchTrend,
   dispatchToArrivalTrend,
   distribution,
-  selectedWoToDispatchDate,
-  onWoToDispatchDateClick,
+  selectedDate,
+  onDateClick,
 }: {
   woToDispatchTrend: TrendPoint[];
   dispatchToArrivalTrend?: TrendPoint[];
   distribution: DistributionPoint[];
-  selectedWoToDispatchDate?: string;
-  onWoToDispatchDateClick?: (date: string) => void;
+  selectedDate?: string;
+  onDateClick?: (date: string) => void;
 }) {
   const totalValid = distribution.reduce((sum, point) => sum + point.count, 0);
   const showDispatchToArrival = dispatchToArrivalTrend !== undefined;
@@ -130,11 +130,17 @@ export function DashboardCharts({
         title="Average WO-to-Dispatch Time Trend"
         trend={woToDispatchTrend}
         color="#0891b2"
-        selectedDate={selectedWoToDispatchDate}
-        onDateClick={onWoToDispatchDateClick}
+        selectedDate={selectedDate}
+        onDateClick={onDateClick}
       />
       {showDispatchToArrival && (
-        <TrendCard title="Average Dispatch-to-Arrival Time Trend" trend={dispatchToArrivalTrend} color="#4f46e5" />
+        <TrendCard
+          title="Average Dispatch-to-Arrival Time Trend"
+          trend={dispatchToArrivalTrend}
+          color="#4f46e5"
+          selectedDate={selectedDate}
+          onDateClick={onDateClick}
+        />
       )}
 
       <article className="min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
