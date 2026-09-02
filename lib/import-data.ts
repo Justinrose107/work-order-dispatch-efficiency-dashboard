@@ -30,10 +30,14 @@ export function parseWorkbookData(data: ArrayBuffer, fileName: string): ImportRe
   return { ...parsed, sheetName, rawRowCount: rows.length };
 }
 
-export async function importWorkOrderFile(file: File) {
-  const extension = file.name.split('.').pop()?.toLowerCase();
+export function parseWorkOrderFileData(data: ArrayBuffer, fileName: string): ImportResult {
+  const extension = fileName.split('.').pop()?.toLowerCase();
   if (!extension || !['xlsx', 'xls', 'csv'].includes(extension)) {
     throw new Error('Please choose an Excel (.xlsx, .xls) or CSV (.csv) file.');
   }
-  return parseWorkbookData(await file.arrayBuffer(), file.name);
+  return parseWorkbookData(data, fileName);
+}
+
+export async function importWorkOrderFile(file: File) {
+  return parseWorkOrderFileData(await file.arrayBuffer(), file.name);
 }

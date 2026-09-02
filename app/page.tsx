@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import {
   AlertTriangle,
@@ -21,8 +21,17 @@ import {
 import type { DistributionPoint, TrendPoint } from '@/components/dashboard-charts';
 import { MultiFilter } from '@/components/multi-filter';
 import { WorkOrderTable } from '@/components/work-order-table';
-import { importWorkOrderFile, type ImportResult } from '@/lib/import-data';
+import { parseWorkOrderFileData, type ImportResult } from '@/lib/import-data';
 import { resolveDispatcherProfile } from '@/lib/dispatcher-directory';
+import {
+  clearStoredPreferences,
+  deleteStoredImport,
+  loadStoredImport,
+  loadStoredPreferences,
+  saveStoredImport,
+  saveStoredPreferences,
+  type StoredDashboardPreferences,
+} from '@/lib/dashboard-storage';
 import {
   average,
   distinctCount,
@@ -78,6 +87,27 @@ const emptyFilters = (): Filters => Object.fromEntries(
   FILTER_FIELDS.map((field) => [field, []]),
 ) as unknown as Filters;
 
+function defaultFiltersFor(records: WorkOrderRecord[]) {
+  const filters = emptyFilters();
+  filters['Work Order Type'] = defaultWorkOrderTypeSelection(records);
+  return filters;
+}
+
+function restoredFiltersFor(records: WorkOrderRecord[], preferences: StoredDashboardPreferences | null) {
+  if (!preferences) return defaultFiltersFor(records);
+  const restored = emptyFilters();
+  for (const field of FILTER_FIELDS) {
+    const available = new Set(records.map((record) => record.values[field]).filter(Boolean));
+    const savedValues = Array.isArray(preferences.filters?.[field])
+      ? preferences.filters[field]
+      : [];
+    restored[field] = savedValues.filter((value): value is string => (
+      typeof value === 'string' && available.has(value)
+    ));
+  }
+  return restored;
+}
+
 function fileDateBounds(records: WorkOrderRecord[]) {
   const keys = records
     .map((record) => record.dates['Created On'])
@@ -129,8 +159,83 @@ export default function Home() {
   const [isDragging, setIsDragging] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [error, setError] = useState('');
+  const [storageWarning, setStorageWarning] = useState('');
   const [dashboardView, setDashboardView] = useState<DashboardView>('standard');
   const [detailDate, setDetailDate] = useState('');
+  const [isRestoring, setIsRestoring] = useState(true);
+  const [persistenceReady, setPersistenceReady] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const restoreDashboard = async () => {
+      try {
+        const storedImport = await loadStoredImport();
+        if (!storedImport || cancelled) return;
+
+        const preferences = loadStoredPreferences();
+        const result = parseWorkOrderFileData(storedImport.data, storedImport.fileName);
+        const bounds = fileDateBounds(result.records);
+        let restoredFrom = preferences?.dateFrom && preferences.dateFrom >= bounds.min && preferences.dateFrom <= bounds.max
+          ? preferences.dateFrom
+          : bounds.min;
+        let restoredTo = preferences?.dateTo && preferences.dateTo >= bounds.min && preferences.dateTo <= bounds.max
+          ? preferences.dateTo
+          : bounds.max;
+        if (restoredFrom > restoredTo) {
+          restoredFrom = bounds.min;
+          restoredTo = bounds.max;
+        }
+        const restoredDetailDate = preferences?.detailDate
+          && preferences.detailDate >= restoredFrom
+          && preferences.detailDate <= restoredTo
+          ? preferences.detailDate
+          : '';
+
+        if (cancelled) return;
+        setImported(result);
+        setFileName(storedImport.fileName);
+        setFilters(restoredFiltersFor(result.records, preferences));
+        setDateFrom(restoredFrom);
+        setDateTo(restoredTo);
+        setDashboardView(preferences?.dashboardView === 'backfill' ? 'backfill' : 'standard');
+        setDetailDate(restoredDetailDate);
+      } catch {
+        if (!cancelled) {
+          setStorageWarning('The previously saved dashboard could not be restored. Please import the file again.');
+        }
+        try {
+          clearStoredPreferences();
+        } catch {
+          // The warning above already explains that browser storage is unavailable.
+        }
+        try {
+          await deleteStoredImport();
+        } catch {
+          // The warning above already explains that browser storage is unavailable.
+        }
+      } finally {
+        if (!cancelled) {
+          setIsRestoring(false);
+          setPersistenceReady(true);
+        }
+      }
+    };
+
+    void restoreDashboard();
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    if (!persistenceReady || !imported) return;
+    try {
+      saveStoredPreferences({ filters, dateFrom, dateTo, dashboardView, detailDate });
+    } catch {
+      window.queueMicrotask(() => {
+        setStorageWarning('Your current filters work now, but this browser could not remember them for next time.');
+      });
+    }
+  }, [dashboardView, dateFrom, dateTo, detailDate, filters, imported, persistenceReady]);
 
   const records = useMemo(() => imported?.records ?? [], [imported]);
   const dateBounds = useMemo(() => fileDateBounds(records), [records]);
@@ -223,18 +328,14 @@ export default function Home() {
       && !imported.recognizedFields.includes('Order Dispatcher')
     : false;
 
-  const defaultFiltersFor = (nextRecords: WorkOrderRecord[]) => {
-    const next = emptyFilters();
-    next['Work Order Type'] = defaultWorkOrderTypeSelection(nextRecords);
-    return next;
-  };
-
   const handleFile = async (file?: File) => {
     if (!file) return;
     setIsImporting(true);
     setError('');
+    setStorageWarning('');
     try {
-      const result = await importWorkOrderFile(file);
+      const data = await file.arrayBuffer();
+      const result = parseWorkOrderFileData(data, file.name);
       const bounds = fileDateBounds(result.records);
       setImported(result);
       setFileName(file.name);
@@ -243,6 +344,16 @@ export default function Home() {
       setDateTo(bounds.max);
       setDashboardView('standard');
       setDetailDate('');
+      try {
+        await saveStoredImport({ fileName: file.name, data, savedAt: Date.now() });
+      } catch {
+        try {
+          await deleteStoredImport();
+        } catch {
+          // Avoid restoring a stale file if the replacement could not be saved.
+        }
+        setStorageWarning('The file is open, but this browser could not remember it for next time.');
+      }
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'The file could not be imported.');
     } finally {
@@ -258,15 +369,26 @@ export default function Home() {
     setDetailDate('');
   };
 
-  const clearFile = () => {
+  const clearFile = async () => {
     setImported(null);
     setFileName('');
     setFilters(emptyFilters());
     setDateFrom('');
     setDateTo('');
     setError('');
+    setStorageWarning('');
     setDashboardView('standard');
     setDetailDate('');
+    try {
+      clearStoredPreferences();
+    } catch {
+      setStorageWarning('The dashboard was cleared here, but the saved browser preferences could not be removed.');
+    }
+    try {
+      await deleteStoredImport();
+    } catch {
+      setStorageWarning('The dashboard was cleared here, but the saved browser copy could not be removed.');
+    }
   };
 
   const drillIntoDate = (date: string) => {
@@ -291,7 +413,7 @@ export default function Home() {
           </div>
           <div className="flex w-fit items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-2 text-xs text-slate-300">
             <ShieldCheck className="h-4 w-4 text-emerald-400" />
-            Data stays in this browser
+            Saved locally in this browser
           </div>
         </div>
       </header>
@@ -304,14 +426,14 @@ export default function Home() {
             onDragEnter={(event) => { event.preventDefault(); setIsDragging(true); }}
             onDragOver={(event) => event.preventDefault()}
             onDragLeave={(event) => { event.preventDefault(); if (event.currentTarget === event.target) setIsDragging(false); }}
-            onDrop={(event) => { event.preventDefault(); setIsDragging(false); handleFile(event.dataTransfer.files?.[0]); }}
+            onDrop={(event) => { event.preventDefault(); setIsDragging(false); if (!isRestoring) handleFile(event.dataTransfer.files?.[0]); }}
             className={`flex min-h-48 flex-col items-center justify-center rounded-2xl border-2 border-dashed bg-white px-6 py-8 text-center shadow-sm transition ${isDragging ? 'border-cyan-500 bg-cyan-50/60' : 'border-slate-300 hover:border-cyan-400'}`}
           >
-            <span className="rounded-2xl bg-cyan-50 p-3 text-cyan-700"><UploadCloud className="h-7 w-7" /></span>
-            <h2 className="mt-4 text-lg font-semibold">Import work order data</h2>
-            <p className="mt-1 max-w-lg text-sm text-slate-500">Drop an Excel or CSV file here. Supported fields and common date formats are detected automatically—no manual mapping needed.</p>
-            <button type="button" disabled={isImporting} onClick={() => inputRef.current?.click()} className="mt-5 rounded-lg bg-cyan-700 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-cyan-800 disabled:opacity-60">
-              {isImporting ? 'Importing…' : 'Choose Excel or CSV'}
+            <span className="rounded-2xl bg-cyan-50 p-3 text-cyan-700">{isRestoring ? <History className="h-7 w-7" /> : <UploadCloud className="h-7 w-7" />}</span>
+            <h2 className="mt-4 text-lg font-semibold">{isRestoring ? 'Restoring your saved dashboard…' : 'Import work order data'}</h2>
+            <p className="mt-1 max-w-lg text-sm text-slate-500">{isRestoring ? 'Reading the last imported file and filter selections saved in this browser.' : 'Drop an Excel or CSV file here. Supported fields and common date formats are detected automatically—no manual mapping needed.'}</p>
+            <button type="button" disabled={isImporting || isRestoring} onClick={() => inputRef.current?.click()} className="mt-5 rounded-lg bg-cyan-700 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-cyan-800 disabled:opacity-60">
+              {isRestoring ? 'Restoring…' : isImporting ? 'Importing…' : 'Choose Excel or CSV'}
             </button>
             <p className="mt-3 text-xs text-slate-400">.xlsx · .xls · .csv</p>
           </section>
@@ -324,7 +446,7 @@ export default function Home() {
                   <h2 className="truncate text-sm font-semibold text-slate-900" title={fileName}>{fileName}</h2>
                   <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-500" />
                 </div>
-                <p className="mt-0.5 text-xs text-slate-500">{imported?.rawRowCount.toLocaleString()} rows · {imported?.recognizedFields.length} fields recognized · sheet “{imported?.sheetName}”</p>
+                <p className="mt-0.5 text-xs text-slate-500">{imported?.rawRowCount.toLocaleString()} rows · {imported?.recognizedFields.length} fields recognized · sheet “{imported?.sheetName}” · remembered in this browser</p>
               </div>
             </div>
             <div className="flex items-center gap-2">
@@ -338,6 +460,12 @@ export default function Home() {
           <div role="alert" className="flex items-start gap-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
             <span>{error}</span>
+          </div>
+        )}
+        {storageWarning && (
+          <div role="status" className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>{storageWarning}</span>
           </div>
         )}
         {records.length > 0 && missingRequired.length > 0 && (
